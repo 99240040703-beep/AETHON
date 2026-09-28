@@ -180,7 +180,7 @@ class AssistantRuntime:
         provider = getattr(getattr(model_router, "provider", None), "name", "")
         if provider != "local-intelligence":
             return False
-        if not response.startswith("I don't have a remote language model configured"):
+        if not (response.startswith("I don't have a remote language model configured") or response.startswith("I can help with that.")):
             return False
         lowered = user_text.casefold()
         research_markers = (
