@@ -107,6 +107,8 @@ class WebsiteBuilder:
             + json.dumps(current.files)
         )
         files, source = self._generate(prompt)
+        if source == "template":
+            files = self._edit_fallback(current.files, instruction)
         self.repository.put(
             "website:" + project_id,
             json.dumps({"project_id": project_id, "prompt": instruction.strip(), "files": files, "source": source}),
