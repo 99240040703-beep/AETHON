@@ -280,6 +280,38 @@ def test_ai_means_is_answered_without_remote_model():
     assert "artificial intelligence" in result.response.lower()
 
 
+def test_website_generation_returns_result_without_provider_details():
+    class FakeCreation:
+        def dispatch(self, capability, payload, provider=None):
+            from aethon.creation_provider_fabric import CreationResult
+            assert capability == "website"
+            assert "web site" in payload["prompt"].lower()
+            return CreationResult("internal-provider", "website", "completed", {"url": "https://example.test"})
+
+    rt = AssistantRuntime(repository=fresh_repo(), model_router=ModelRouter(DeterministicProvider()), creation_fabric=FakeCreation())
+    result = rt.run(owner_id="owner-web", session_id="web-1", text="create a web site for my project", language="en-IN")
+
+    assert result.intent.intent_type.value == "WEBSITE_GENERATION"
+    assert result.verified is True
+    assert "https://example.test" in result.response
+    assert "internal-provider" not in result.response
+    assert any(event.type == "creation.completed" and event.data["has_result_url"] for event in result.events)
+
+
+def test_creation_queue_response_is_human_facing():
+    class FakeCreation:
+        def dispatch(self, capability, payload, provider=None):
+            from aethon.creation_provider_fabric import CreationResult
+            return CreationResult("internal-provider", capability, "queued", {"request_id": "req-1"})
+
+    rt = AssistantRuntime(repository=fresh_repo(), model_router=ModelRouter(DeterministicProvider()), creation_fabric=FakeCreation())
+    result = rt.run(owner_id="owner-queue", session_id="queue-1", text="create an image of a mountain", language="en-IN")
+
+    assert "started creating" in result.response.lower()
+    assert "internal-provider" not in result.response
+    assert "submitted your image request" not in result.response.lower()
+
+
 def test_image_generation_intent_uses_creation_fabric():
     class FakeCreation:
         def dispatch(self, capability, payload, provider=None):
