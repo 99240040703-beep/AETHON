@@ -90,7 +90,7 @@ def build_chart(text: str) -> dict[str, Any] | None:
     payload = _payload(text)
     title = _title(text, kind)
     if kind == "histogram":
-        numbers = re.findall(r"-?\\d+(?:\\.\\d+)?", payload)
+        numbers = re.findall(r"-?\d+(?:\.\d+)?", payload)
         if len(numbers) < 2:
             return None
         values = [float(value) for value in numbers[:100]]
