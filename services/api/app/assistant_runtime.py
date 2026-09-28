@@ -58,11 +58,11 @@ class AssistantRuntime:
         self.model_router = model_router or ModelRouter()
         self.ai_fabric = ai_fabric or AIProviderFabric()
         self.creation_fabric = creation_fabric or CreationProviderFabric()
-        self.website_builder = WebsiteBuilder(ai_fabric=self.ai_fabric, repository=self.memory.repository)
         self.tools = tools or ToolRegistry()
         self.safety_gate = safety_gate or SafetyExecutionGate(SafetyKernel())
         self.event_sink = event_sink
         self.memory = NaturalMemory()
+        self.website_builder = WebsiteBuilder(ai_fabric=self.ai_fabric, repository=self.memory.repository)
 
     def _emit(self, events: list[RuntimeEvent], event_type: str, request_id: str,
               event_callback: Callable[[RuntimeEvent], None] | None = None,
