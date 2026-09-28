@@ -61,7 +61,7 @@ class IntentAnalyzer:
         if not value: raise ValueError("assistant input cannot be empty")
         if self._MEMORY.search(value): return IntentAnalysis(IntentType.MEMORY, 0.99, ("memory-language",))
         words=set(re.findall(r"[a-z]+", value.lower()))
-        if context and words.intersection({"same","that","this","previous","above","it","them","more"}): return IntentAnalysis(IntentType.NORMAL_CHAT, 0.70, ("contextual-reference",), arguments={"needs_context": True})
+        if context and (words.intersection({"same","that","this","previous","above","it","them","more"}) or value.casefold().startswith(("what about ","how about ","and "))) : return IntentAnalysis(IntentType.NORMAL_CHAT, 0.70, ("contextual-reference",), arguments={"needs_context": True})
         if self._DEVICE.search(value): return IntentAnalysis(IntentType.DEVICE_ACTION, 0.96, ("device-language",), True)
         if self._IMAGE.search(value): return IntentAnalysis(IntentType.IMAGE_GENERATION, 0.93, ("image-generation-structure",))
         if self._VIDEO.search(value): return IntentAnalysis(IntentType.VIDEO_GENERATION, 0.93, ("video-generation-structure",))
