@@ -51,7 +51,7 @@ def respond(request: VoiceRequest, owner_id: str = Depends(owner)) -> VoiceRespo
               f"User said: {request.transcript}")
     try:
         provider_name = model_router.provider.name
-        if provider_name == "deterministic": response, provider = deterministic_ack(profile, request.transcript), "deterministic-fallback"
+        if provider_name in {"deterministic", "local-intelligence"}: response, provider = deterministic_ack(profile, request.transcript), "deterministic-fallback"
         else: response, provider = model_router.generate(prompt), provider_name
     except Exception: response, provider = deterministic_ack(profile, request.transcript), "deterministic-fallback"
     return VoiceResponse(ok=True, session_id=session_id, language=profile.tts_locale, transcript=request.transcript,
