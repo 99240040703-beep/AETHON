@@ -85,3 +85,23 @@ class WebsiteBuilder:
 
     def artifact(self, build: WebsiteBuild) -> dict[str,Any]:
         return {"type":"website","project_id":build.project_id,"files":build.files,"entrypoint":"index.html"}
+
+    def update(self, project_id: str, instruction: str, *, owner_id: str) -> WebsiteBuild:
+        current = self.get(project_id, owner_id=owner_id)
+        if current is None:
+            raise ValueError("website project not found")
+        prompt = (
+            "Modify this existing website according to the user's request. "
+            "Preserve unrelated behavior and return ONLY JSON with a files object. "
+            "Allowed files: index.html, styles.css, app.js, README.md. "
+            f"User request: {instruction}\nExisting files:\n"
+            + json.dumps(current.files)
+        )
+        files, source = self._generate(prompt)
+        self.repository.put(
+            "website:" + project_id,
+            json.dumps({"project_id": project_id, "prompt": instruction.strip(), "files": files, "source": source}),
+            owner_id=owner_id, project_id=project_id, namespace="website_artifacts",
+            memory_type="website", source="website_builder", confidence=1.0,
+        )
+        return WebsiteBuild(project_id, files, source)
