@@ -53,7 +53,7 @@ class NaturalMemory:
                 raise MemorySecurityError("memory content is not eligible for storage")
             content = redact_secrets(command.content).strip()
             if not content or content == "[REDACTED]":
-                raise MemorySecurityError("memory content contains only protected secret material")
+                return {"action": "redacted", "memory": {"content": "[REDACTED]"}}
             memory_id = "nl:" + str(abs(hash((owner_id, project_id, content.casefold()))))
             record = self.repository.put(
                 memory_id, content, owner_id=owner_id, project_id=project_id,
