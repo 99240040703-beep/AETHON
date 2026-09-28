@@ -7,6 +7,8 @@ from typing import Any
 def _chart_type(text: str) -> str | None:
     lowered = text.casefold()
     for word, kind in (("histogram", "histogram"), ("scatter", "scatter"), ("pie", "pie"), ("line", "line"), ("bar", "bar")):
+        if word == "histogram" and word in lowered:
+            return kind
         if word in lowered and any(token in lowered for token in ("chart", "plot", "graph")):
             return kind
     return "bar" if any(token in lowered for token in ("graph", "plot")) else None
