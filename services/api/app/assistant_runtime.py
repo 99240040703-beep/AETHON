@@ -324,6 +324,20 @@ class AssistantRuntime:
             "WEBSITE_GENERATION": "website",
         }
         capability = creation_capabilities.get(intent.intent_type.value)
+        if capability == "website" and project_id and execute_tools and any(
+            marker in effective_text.casefold() for marker in ("change ", "modify ", "update ", "edit ", "make it ", "add ", "remove ", "replace ")
+        ):
+            try:
+                build = self.website_builder.update(project_id, text, owner_id=owner_id)
+                artifact = self.website_builder.artifact(build)
+                response = "Done — I updated your website project."
+                self.repository.add_message(session_id, owner_id, "assistant", response, language,
+                    intent="website_generation", status="SUCCEEDED",
+                    metadata={"request_id": request_id, "project_id": project_id, "artifact": artifact})
+                self._emit(events, "creation.completed", request_id, event_callback, capability="website", status="updated", has_result_url=False)
+                return RuntimeResult(request_id, session_id, intent.mode, intent, response, events=tuple(events), verified=True, visualization=artifact)
+            except Exception as exc:
+                self._emit(events, "creation.update_failed", request_id, event_callback, capability="website", reason=type(exc).__name__)
         if capability and execute_tools:
             try:
                 if capability == "website":
