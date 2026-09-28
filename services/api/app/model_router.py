@@ -87,11 +87,15 @@ class LocalIntelligenceProvider:
         "what is api": "An API is a defined way for software components to communicate, commonly using HTTP requests and structured responses such as JSON.",
         "json": "JSON is a lightweight text format commonly used to exchange structured data between applications.",
         "git": "Git is a distributed version-control system that records changes as commits and supports branches and collaboration.",
-        "android": "Android is a mobile operating system and application platform. Android apps are commonly built with Kotlin or Java."
+        "android": "Android is a mobile operating system and application platform. Android apps are commonly built with Kotlin or Java.",
+        "what is postgresql": "PostgreSQL is an open-source relational database system that supports SQL, transactions, indexes, extensions, and advanced data types.",
+        "postgresql": "PostgreSQL is an open-source relational database system that supports SQL, transactions, indexes, extensions, and advanced data types."
     }
 
     def generate(self, prompt: str, user_text: str | None = None) -> str:
         text = (user_text or "").strip()
+        if not text:
+            text = DeterministicProvider._user_text(prompt)
         if not text:
             return "How can I help you?"
         normalized = " ".join(text.lower().strip().rstrip("?.!").split())
