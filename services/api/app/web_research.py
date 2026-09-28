@@ -47,7 +47,7 @@ class WebResearchAgent:
         if not normalized:
             raise ValueError("query must not be empty")
 
-        raw_results = self.search(normalized, max(self.max_sources, 10)) or []
+        raw_results = self.search(normalized, self.max_sources) or []
         sources: list[ResearchSource] = []
         limitations: list[str] = []
         seen_urls: set[str] = set()
