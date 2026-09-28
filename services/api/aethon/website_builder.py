@@ -86,6 +86,15 @@ class WebsiteBuilder:
     def artifact(self, build: WebsiteBuild) -> dict[str,Any]:
         return {"type":"website","project_id":build.project_id,"files":build.files,"entrypoint":"index.html"}
 
+    @staticmethod
+    def _edit_fallback(files: dict[str, str], instruction: str) -> dict[str, str]:
+        lowered = instruction.casefold()
+        result = dict(files)
+        if "remove button" in lowered or "remove the button" in lowered:
+            result["index.html"] = re.sub(r"<button[^>]*>.*?</button>", "", result.get("index.html", ""), flags=re.S|re.I)
+        if "dark" in lowered and "background:" not in result.get("styles.css", ""):
+            result["styles.css"] = "body{background:#0b1020;color:#eef2ff;}\n" + result.get("styles.css", "")
+        return result
     def update(self, project_id: str, instruction: str, *, owner_id: str) -> WebsiteBuild:
         current = self.get(project_id, owner_id=owner_id)
         if current is None:
