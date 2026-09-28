@@ -9,6 +9,7 @@ from aethon.execution_safety_gate import ExecutionAuthorizationError, SafetyExec
 from aethon.model_router import ModelRouter
 from aethon.ai_provider_fabric import AIProviderFabric
 from aethon.creation_provider_fabric import CreationProviderFabric
+from aethon.website_builder import WebsiteBuilder
 from aethon.schemas import ToolRequest, ToolResult
 from aethon.security import SafetyKernel
 from app.assistant_repository import AssistantRepository
@@ -57,6 +58,7 @@ class AssistantRuntime:
         self.model_router = model_router or ModelRouter()
         self.ai_fabric = ai_fabric or AIProviderFabric()
         self.creation_fabric = creation_fabric or CreationProviderFabric()
+        self.website_builder = WebsiteBuilder(ai_fabric=self.ai_fabric, repository=self.memory.repository)
         self.tools = tools or ToolRegistry()
         self.safety_gate = safety_gate or SafetyExecutionGate(SafetyKernel())
         self.event_sink = event_sink
@@ -324,7 +326,22 @@ class AssistantRuntime:
         capability = creation_capabilities.get(intent.intent_type.value)
         if capability and execute_tools:
             try:
-                creation = self.creation_fabric.dispatch(capability, {"prompt": text})
+                if capability == "website":
+                    build = self.website_builder.build(text, owner_id=owner_id, project_id=project_id)
+                    artifact = self.website_builder.artifact(build)
+                    try:
+                        creation = self.creation_fabric.dispatch(capability, {"prompt": text, "project_id": build.project_id, "files": build.files})
+                    except Exception:
+                        creation = None
+                    if creation is None:
+                        response = f"Done — I built your website as a project artifact. Entry file: index.html."
+                        self.repository.add_message(session_id, owner_id, "assistant", response, language,
+                            intent=intent.intent_type.value.lower(), status="SUCCEEDED",
+                            metadata={"request_id": request_id, "project_id": build.project_id, "artifact": artifact})
+                        self._emit(events, "creation.completed", request_id, event_callback, capability=capability, status="built", has_result_url=False)
+                        return RuntimeResult(request_id, session_id, intent.mode, intent, response, events=tuple(events), verified=True, visualization=artifact)
+                else:
+                    creation = self.creation_fabric.dispatch(capability, {"prompt": text})
                 output = creation.output if isinstance(creation.output, dict) else {}
                 result_url = (
                     output.get("url")
