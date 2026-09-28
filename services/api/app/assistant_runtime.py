@@ -325,26 +325,43 @@ class AssistantRuntime:
         if capability and execute_tools:
             try:
                 creation = self.creation_fabric.dispatch(capability, {"prompt": text})
-                response = (
-                    f"I submitted your {capability} request to {creation.provider}. "
-                    f"The creation status is {creation.status}."
+                output = creation.output if isinstance(creation.output, dict) else {}
+                result_url = (
+                    output.get("url")
+                    or output.get("deployment_url")
+                    or output.get("preview_url")
+                    or output.get("public_url")
                 )
+                status = str(creation.status or "submitted").casefold()
+                if result_url:
+                    response = f"Done — I created your {capability}. You can open it here: {result_url}"
+                elif status in {"queued", "pending", "processing", "submitted", "in_progress"}:
+                    response = f"I've started creating your {capability}. I'll use the creation result returned by the connected service when it is ready."
+                elif status in {"completed", "complete", "succeeded", "success"}:
+                    response = f"Your {capability} is ready."
+                else:
+                    response = f"I couldn't confirm that the {capability} creation finished successfully."
                 self.repository.add_message(
                     session_id, owner_id, "assistant", response, language,
-                    intent=intent.intent_type.value.lower(), status="SUCCEEDED",
-                    metadata={"request_id": request_id, "provider": creation.provider, "status": creation.status},
+                    intent=intent.intent_type.value.lower(),
+                    status="SUCCEEDED" if status not in {"failed", "error"} else "FAILED",
+                    metadata={
+                        "request_id": request_id,
+                        "status": creation.status,
+                        "has_result_url": bool(result_url),
+                    },
                 )
                 self._emit(events, "creation.completed", request_id, event_callback,
-                           capability=capability, provider=creation.provider, status=creation.status)
+                           capability=capability, status=creation.status, has_result_url=bool(result_url))
                 return RuntimeResult(request_id, session_id, intent.mode, intent, response,
-                                     events=tuple(events), verified=False)
-            except Exception:
-                response = (
-                    f"I can handle {capability} creation, but no configured provider is available "
-                    "for that capability on this AETHON deployment yet."
-                )
+                                     events=tuple(events), verified=bool(result_url))
+            except Exception as exc:
                 self._emit(events, "creation.unavailable", request_id, event_callback,
-                           capability=capability)
+                           capability=capability, reason=type(exc).__name__)
+                response = (
+                    f"I can't complete that {capability} request yet because the required creation "
+                    "service isn't connected."
+                )
                 self.repository.add_message(
                     session_id, owner_id, "assistant", response, language,
                     intent=intent.intent_type.value.lower(), status="FAILED",
