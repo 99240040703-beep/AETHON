@@ -61,7 +61,7 @@ class Plan:
 
     def next_ready(self, completed: set[str]) -> PlanStep | None:
         for step in self.steps:
-            if step.id in self.outputs:
+            if step.id in completed or step.id in self.outputs:
                 continue
             if all(dep in completed for dep in step.depends_on):
                 return step
