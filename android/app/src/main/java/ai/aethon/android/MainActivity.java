@@ -58,6 +58,7 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
     private String responseLocale = "en-IN";
     private String lastAssistantText = "";
     private String evolveVoiceSessionId;
+    private AndroidActionExecutor localActionExecutor;
     private BroadcastReceiver wakeReceiver;
 
     private int dp(float v) { return (int)(v * getResources().getDisplayMetrics().density + .5f); }
@@ -95,7 +96,7 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         IntentFilter wakeFilter = new IntentFilter(WakeWordService.ACTION_WAKE);
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(wakeReceiver, wakeFilter, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(wakeReceiver, wakeFilter);
-        textToSpeech=new TextToSpeech(this,this); if(Build.VERSION.SDK_INT>=23&&checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQUEST_RECORD_AUDIO);else initSpeech(); }
+        localActionExecutor = new AndroidActionExecutor(this); textToSpeech=new TextToSpeech(this,this); if(Build.VERSION.SDK_INT>=23&&checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQUEST_RECORD_AUDIO);else initSpeech(); }
 
     private void buildUi() {
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(20),dp(28),dp(20),dp(24));root.setBackgroundColor(Color.rgb(8,13,24));
@@ -192,7 +193,38 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
         new Thread(()->{try{evolveRequest("/"+evolveVoiceSessionId+"/sleep","POST",null);}catch(Exception ignored){}}).start();
     }
 
-    private void sendAssistant(){String text=transcript.getText().toString().trim();if(text.isEmpty()){status.setText("Type or speak a request first");return;}text=stripWakePhrase(text);final String requestText=text;addMessage("You",text);String base=apiUrl.getText().toString().trim().replaceAll("/+$","");String token=apiToken.getText().toString();if(base.isEmpty()||token.isEmpty()){status.setText("Enter your public API URL and personal API token");return;}status.setText("ASTRA is thinking…");final String url=base;new Thread(()->{HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(url+"/v1/assistant/runtime/respond").openConnection();c.setRequestMethod("POST");c.setDoOutput(true);c.setConnectTimeout(10000);c.setReadTimeout(45000);c.setRequestProperty("Authorization","Bearer "+token);c.setRequestProperty("Content-Type","application/json; charset=UTF-8");JSONObject o=new JSONObject();o.put("text",requestText);o.put("language",responseLocale);if(sessionId!=null)o.put("session_id",sessionId);try(OutputStream out=c.getOutputStream()){out.write(o.toString().getBytes(StandardCharsets.UTF_8));}int code=c.getResponseCode();BufferedReader rd=new BufferedReader(new InputStreamReader(code>=400?c.getErrorStream():c.getInputStream(),StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();String line;while((line=rd.readLine())!=null)b.append(line);if(code>=400)throw new IllegalStateException("HTTP "+code);JSONObject res=new JSONObject(b.toString());sessionId=res.optString("session_id",sessionId);responseLocale=res.optString("language","te-IN");String answer=res.optString("response","");String mode=res.optString("mode","");boolean confirmation=res.optBoolean("requires_confirmation",false);boolean authorized=res.optBoolean("action_authorized",false);boolean verified=res.optBoolean("verified",false);handler.post(()->{lastAssistantText=answer;String stateNote=confirmation?"\n\nApproval required before this action can execute.":(authorized&&verified?"\n\nAction authorized and verified.":(mode.equals("ACTION")?"\n\nAction not executed.":""));addMessage("✦ ASTRA",answer+stateNote);status.setText(voiceMode?"Voice control • response received • listening again":"ASTRA replied • "+responseLocale);speakText(answer);});}catch(Exception e){handler.post(()->status.setText("Assistant connection failed • "+e.getMessage()));}finally{if(c!=null)c.disconnect();}}).start();}
+    private void sendAssistant(){String text=transcript.getText().toString().trim();if(text.isEmpty()){status.setText("Type or speak a request first");return;}text=stripWakePhrase(text);final String requestText=text;if(tryExecuteLocalVoiceAction(requestText))return;addMessage("You",text);String base=apiUrl.getText().toString().trim().replaceAll("/+$","");String token=apiToken.getText().toString();if(base.isEmpty()||token.isEmpty()){status.setText("Enter your public API URL and personal API token");return;}status.setText("ASTRA is thinking…");final String url=base;new Thread(()->{HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(url+"/v1/assistant/runtime/respond").openConnection();c.setRequestMethod("POST");c.setDoOutput(true);c.setConnectTimeout(10000);c.setReadTimeout(45000);c.setRequestProperty("Authorization","Bearer "+token);c.setRequestProperty("Content-Type","application/json; charset=UTF-8");JSONObject o=new JSONObject();o.put("text",requestText);o.put("language",responseLocale);if(sessionId!=null)o.put("session_id",sessionId);try(OutputStream out=c.getOutputStream()){out.write(o.toString().getBytes(StandardCharsets.UTF_8));}int code=c.getResponseCode();BufferedReader rd=new BufferedReader(new InputStreamReader(code>=400?c.getErrorStream():c.getInputStream(),StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();String line;while((line=rd.readLine())!=null)b.append(line);if(code>=400)throw new IllegalStateException("HTTP "+code);JSONObject res=new JSONObject(b.toString());sessionId=res.optString("session_id",sessionId);responseLocale=res.optString("language","te-IN");String answer=res.optString("response","");String mode=res.optString("mode","");boolean confirmation=res.optBoolean("requires_confirmation",false);boolean authorized=res.optBoolean("action_authorized",false);boolean verified=res.optBoolean("verified",false);handler.post(()->{lastAssistantText=answer;String stateNote=confirmation?"\n\nApproval required before this action can execute.":(authorized&&verified?"\n\nAction authorized and verified.":(mode.equals("ACTION")?"\n\nAction not executed.":""));addMessage("✦ ASTRA",answer+stateNote);status.setText(voiceMode?"Voice control • response received • listening again":"ASTRA replied • "+responseLocale);speakText(answer);});}catch(Exception e){handler.post(()->status.setText("Assistant connection failed • "+e.getMessage()));}finally{if(c!=null)c.disconnect();}}).start();}
+    private boolean tryExecuteLocalVoiceAction(String text){
+        String t=text.toLowerCase(Locale.ROOT).trim();
+        String capability=null;
+        if(t.matches(".*\\b(turn on|switch on|enable)\\b.*\\b(flashlight|torch)\\b.*")) capability=AndroidCapabilityRegistry.FLASHLIGHT_ON;
+        else if(t.matches(".*\\b(turn off|switch off|disable)\\b.*\\b(flashlight|torch)\\b.*")) capability=AndroidCapabilityRegistry.FLASHLIGHT_OFF;
+        else if(t.matches(".*\\b(play|resume)\\b.*\\b(music|media|song)\\b.*")) capability=AndroidCapabilityRegistry.MEDIA_PLAY;
+        else if(t.matches(".*\\b(pause)\\b.*\\b(music|media|song)\\b.*")) capability=AndroidCapabilityRegistry.MEDIA_PAUSE;
+        else if(t.matches(".*\\bstop\\b.*\\b(music|media|song)\\b.*")) capability=AndroidCapabilityRegistry.MEDIA_STOP;
+        if(capability==null||localActionExecutor==null)return false;
+        final String selected=capability;
+        status.setText("EVOLVE executing • "+selected);
+        new Thread(()->{
+            AndroidActionExecutor.Result result=localActionExecutor.execute(selected, java.util.Collections.emptyMap());
+            handler.post(()->{
+                String answer;
+                if(result.accepted&&result.verified){
+                    answer="Done. "+result.message+". The device reported the action as verified.";
+                }else if(result.accepted){
+                    answer="The device accepted the action, but verification was not complete: "+result.message;
+                }else{
+                    answer="I couldn't execute that device action: "+result.message;
+                }
+                addMessage("✦ EVOLVE",answer);
+                lastAssistantText=answer;
+                status.setText(result.accepted&&result.verified?"Device action verified":"Device action not verified");
+                speakText(answer);
+            });
+        }).start();
+        return true;
+    }
+
     private String stripWakePhrase(String text){String t=text.trim();String lower=t.toLowerCase(Locale.ROOT);String[] wakes={"hey evolve","ok evolve","okay evolve"};for(String wake:wakes){if(lower.startsWith(wake)){return t.substring(wake.length()).trim();}}return t;}
     private void checkHealth(){String base=apiUrl.getText().toString().trim().replaceAll("/+$","");new Thread(()->{try{HttpURLConnection c=(HttpURLConnection)new URL(base+"/health").openConnection();c.setConnectTimeout(8000);c.setReadTimeout(8000);int code=c.getResponseCode();handler.post(()->status.setText("API connected • HTTP "+code));c.disconnect();}catch(Exception e){handler.post(()->status.setText("API connection failed • check public URL"));}}).start();}
     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);if(r==REQUEST_RECORD_AUDIO&&g.length>0&&g[0]==PackageManager.PERMISSION_GRANTED)initSpeech();}
