@@ -21,7 +21,7 @@ def test_evolve_android_workflow_rejects_unknown_goal():
 def test_evolve_select_action_candidate_fails_closed_on_ambiguity():
     planner = AndroidWorkflowPlanner()
     step = {"capability":"SCREEN_CLICK","arguments":{"text":"Settings"}}
-    snapshot = {"connected":True,"elements":[
+    snapshot = {"connected":True,"nodes":[
         {"text":"Settings","enabled":True,"clickable":True},
         {"text":"Settings","enabled":True,"clickable":True},
     ]}
