@@ -23,6 +23,21 @@ public final class AndroidServiceLifecycleContractTest {
     }
 
     @Test
+    public void wakeServiceUsesEvolvePhraseAndRejectsLegacyPhrase() throws Exception {
+        String wake = read("java/ai/aethon/android/WakeWordService.java");
+        assertTrue(wake.contains("WAKE_PHRASE = "hey evolve""));
+        assertTrue(wake.contains("String[] prefixes = {"));
+        assertTrue(wake.contains("WAKE_PHRASE"));
+        assertTrue(!wake.contains("hey assistant"));
+    }
+
+    @Test
+    public void activityUsesEvolveWakePhrase() throws Exception {
+        String activity = read("java/ai/aethon/android/MainActivity.java");
+        assertTrue(activity.contains("Hey Evolve"));
+    }
+
+    @Test
     public void activityStartsAndStopsService() throws Exception {
         String activity = read("java/ai/aethon/android/MainActivity.java");
         assertTrue(activity.contains("AndroidCommandService.start(this,base,id,token)"));
