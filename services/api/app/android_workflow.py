@@ -136,7 +136,6 @@ class AndroidWorkflowPlanner:
         return candidate
 
     @staticmethod
-    @staticmethod
     def recover_target(step: dict[str, Any], result: dict[str, Any], attempts: int) -> dict[str, Any] | None:
         """Return a bounded alternative semantic target after a failed observation."""
         if attempts >= MAX_RECOVERY_ATTEMPTS:
