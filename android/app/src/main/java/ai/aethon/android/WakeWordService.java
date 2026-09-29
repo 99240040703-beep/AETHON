@@ -29,13 +29,14 @@ public final class WakeWordService extends Service {
     public static final String ACTION_WAKE = "ai.aethon.android.ACTION_WAKE";
     public static final String EXTRA_COMMAND = "command";
     private static final String CHANNEL = "aethon_wake";
+    private static final String WAKE_PHRASE = "hey evolve";
     private SpeechRecognizer recognizer;
     private volatile boolean running;
 
     @Override public void onCreate() {
         super.onCreate();
         createChannel();
-        startForeground(4201, notification("Wake listener active"));
+        startForeground(4201, notification("EVOLVE wake listener active"));
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             stopSelf();
             return;
@@ -98,9 +99,7 @@ public final class WakeWordService extends Service {
         String value = input.trim();
         String lower = value.toLowerCase(Locale.ROOT);
         String[] prefixes = {
-                "hey assistant", "ok assistant", "okay assistant",
-                "hey aethon", "ok aethon", "okay aethon",
-                "hey astra", "ok astra", "okay astra"
+                WAKE_PHRASE
         };
         for (String prefix : prefixes) {
             if (lower.equals(prefix)) return "";
@@ -128,7 +127,7 @@ public final class WakeWordService extends Service {
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationManager manager = getSystemService(NotificationManager.class);
             manager.createNotificationChannel(new NotificationChannel(
-                    CHANNEL, "AETHON wake listener", NotificationManager.IMPORTANCE_LOW));
+                    CHANNEL, "EVOLVE wake listener", NotificationManager.IMPORTANCE_LOW));
         }
     }
 
