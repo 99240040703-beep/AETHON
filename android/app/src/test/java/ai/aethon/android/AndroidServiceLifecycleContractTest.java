@@ -65,6 +65,19 @@ public final class AndroidServiceLifecycleContractTest {
     }
 
     @Test
+    public void voiceActionBridgeIsBoundedToAllowlistedCapabilities() throws Exception {
+        String activity = read("java/ai/aethon/android/MainActivity.java");
+        assertTrue(activity.contains("tryExecuteLocalVoiceAction"));
+        assertTrue(activity.contains("FLASHLIGHT_ON"));
+        assertTrue(activity.contains("FLASHLIGHT_OFF"));
+        assertTrue(activity.contains("MEDIA_PLAY"));
+        assertTrue(activity.contains("MEDIA_PAUSE"));
+        assertTrue(activity.contains("MEDIA_STOP"));
+        assertTrue(activity.contains("result.accepted&&result.verified"));
+        assertTrue(activity.contains("AndroidActionExecutor"));
+    }
+
+    @Test
     public void activityStartsAndStopsService() throws Exception {
         String activity = read("java/ai/aethon/android/MainActivity.java");
         assertTrue(activity.contains("AndroidCommandService.start(this,base,id,token)"));
