@@ -194,6 +194,20 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
     }
 
     private void sendAssistant(){String text=transcript.getText().toString().trim();if(text.isEmpty()){status.setText("Type or speak a request first");return;}text=stripWakePhrase(text);final String requestText=text;if(tryExecuteRemoteAndroidWorkflow(requestText))return;\n        if(tryExecuteLocalVoiceAction(requestText))return;addMessage("You",text);String base=apiUrl.getText().toString().trim().replaceAll("/+$","");String token=apiToken.getText().toString();if(base.isEmpty()||token.isEmpty()){status.setText("Enter your public API URL and personal API token");return;}status.setText("ASTRA is thinking…");final String url=base;new Thread(()->{HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(url+"/v1/assistant/runtime/respond").openConnection();c.setRequestMethod("POST");c.setDoOutput(true);c.setConnectTimeout(10000);c.setReadTimeout(45000);c.setRequestProperty("Authorization","Bearer "+token);c.setRequestProperty("Content-Type","application/json; charset=UTF-8");JSONObject o=new JSONObject();o.put("text",requestText);o.put("language",responseLocale);if(sessionId!=null)o.put("session_id",sessionId);try(OutputStream out=c.getOutputStream()){out.write(o.toString().getBytes(StandardCharsets.UTF_8));}int code=c.getResponseCode();BufferedReader rd=new BufferedReader(new InputStreamReader(code>=400?c.getErrorStream():c.getInputStream(),StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();String line;while((line=rd.readLine())!=null)b.append(line);if(code>=400)throw new IllegalStateException("HTTP "+code);JSONObject res=new JSONObject(b.toString());sessionId=res.optString("session_id",sessionId);responseLocale=res.optString("language","te-IN");String answer=res.optString("response","");String mode=res.optString("mode","");boolean confirmation=res.optBoolean("requires_confirmation",false);boolean authorized=res.optBoolean("action_authorized",false);boolean verified=res.optBoolean("verified",false);handler.post(()->{lastAssistantText=answer;String stateNote=confirmation?"\n\nApproval required before this action can execute.":(authorized&&verified?"\n\nAction authorized and verified.":(mode.equals("ACTION")?"\n\nAction not executed.":""));addMessage("✦ ASTRA",answer+stateNote);status.setText(voiceMode?"Voice control • response received • listening again":"ASTRA replied • "+responseLocale);speakText(answer);});}catch(Exception e){handler.post(()->status.setText("Assistant connection failed • "+e.getMessage()));}finally{if(c!=null)c.disconnect();}}).start();}
+    private void recordEvolveWorkflowMemory(String base,String token,String goal,String outcome,long durationMs){
+        new Thread(()->{
+            HttpURLConnection c=null;
+            try{
+                c=(HttpURLConnection)new URL(base+"/v1/evolve/memory/traces").openConnection();
+                c.setRequestMethod("POST");c.setDoOutput(true);c.setConnectTimeout(5000);c.setReadTimeout(8000);
+                c.setRequestProperty("Authorization","Bearer "+token);c.setRequestProperty("Content-Type","application/json; charset=UTF-8");
+                JSONObject body=new JSONObject();body.put("goal",goal);body.put("steps",new JSONArray());body.put("outcome",outcome);body.put("duration_ms",Math.min(durationMs,3600000L));
+                try(OutputStream out=c.getOutputStream()){out.write(body.toString().getBytes(StandardCharsets.UTF_8));}
+                c.getResponseCode();
+            }catch(Exception ignored){}finally{if(c!=null)c.disconnect();}
+        }).start();
+    }
+
     private boolean tryExecuteRemoteAndroidWorkflow(String text){
         String deviceId=deviceIdInput==null?"":deviceIdInput.getText().toString().trim();
         String base=apiUrl.getText().toString().trim().replaceAll("/+$","");
@@ -234,6 +248,8 @@ public final class MainActivity extends Activity implements TextToSpeech.OnInitL
                     if("COMPLETED".equals(finalState)||"FAILED".equals(finalState)||"CANCELLED".equals(finalState))break;
                 }
                 final String resultState=finalState;
+                long durationMs=Math.max(0L,30000L-(deadline-System.currentTimeMillis()));
+                if("COMPLETED".equals(resultState)) recordEvolveWorkflowMemory(url,auth,goal,resultState,durationMs);
                 handler.post(()->{
                     String answer="COMPLETED".equals(resultState)?"Done. The Android workflow completed and its steps were verified.":"FAILED".equals(resultState)?"The Android workflow could not be completed safely.":"The Android workflow is still running on the device.";
                     addMessage("✦ EVOLVE",answer);lastAssistantText=answer;status.setText("EVOLVE workflow • "+resultState);speakText(answer);
