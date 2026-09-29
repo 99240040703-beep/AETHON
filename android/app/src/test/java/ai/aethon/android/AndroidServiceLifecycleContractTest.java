@@ -67,7 +67,7 @@ public final class AndroidServiceLifecycleContractTest {
     @Test
     public void voiceActionBridgeIsBoundedToAllowlistedCapabilities() throws Exception {
         String activity = read("java/ai/aethon/android/MainActivity.java");
-        assertTrue(activity.contains("tryExecuteLocalVoiceAction"));
+        assertTrue(activity.contains("tryExecuteRemoteAndroidWorkflow"));\n        assertTrue(activity.contains("/v1/evolve/android/workflows"));\n        assertTrue(activity.contains("\"approval\",true"));\n        assertTrue(activity.contains("tryExecuteLocalVoiceAction"));
         assertTrue(activity.contains("FLASHLIGHT_ON"));
         assertTrue(activity.contains("FLASHLIGHT_OFF"));
         assertTrue(activity.contains("MEDIA_PLAY"));
