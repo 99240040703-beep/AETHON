@@ -19,4 +19,4 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements.txt
-      - run: pytest -q tests/test_evolve_voice.py
+      - run: pytest -q tests/test_evolve_voice.py tests/test_evolve_android_workflow.py
