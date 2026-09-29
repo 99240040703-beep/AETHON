@@ -8,6 +8,7 @@ from app.android_ui_state import find_candidates, normalize_snapshot
 
 MAX_WORKFLOW_STEPS = 8
 MAX_SELECTOR_LENGTH = 200
+MAX_RECOVERY_ATTEMPTS = 2
 
 @dataclass(frozen=True)
 class AndroidWorkflowStep:
@@ -133,6 +134,19 @@ class AndroidWorkflowPlanner:
         if capability == "SCREEN_SCROLL" and not candidate.get("scrollable"):
             return None
         return candidate
+
+    @staticmethod
+    @staticmethod
+    def recover_target(step: dict[str, Any], result: dict[str, Any], attempts: int) -> dict[str, Any] | None:
+        """Return a bounded alternative semantic target after a failed observation."""
+        if attempts >= MAX_RECOVERY_ATTEMPTS:
+            return None
+        candidate = AndroidWorkflowPlanner.select_action_candidate(step, result)
+        if candidate is None:
+            return None
+        recovered = dict(step)
+        recovered["arguments"] = {k: candidate[k] for k in ("text", "description", "class", "package") if k in candidate}
+        return recovered
 
     @staticmethod
     def verify(step: dict[str, Any], result: dict[str, Any]) -> bool:
