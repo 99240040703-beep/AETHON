@@ -38,6 +38,23 @@ public final class AndroidServiceLifecycleContractTest {
     }
 
     @Test
+    public void activityConnectsSpeechToEvolveVoiceApi() throws Exception {
+        String activity = read("java/ai/aethon/android/MainActivity.java");
+        assertTrue(activity.contains("EVOLVE_VOICE_SESSIONS"));
+        assertTrue(activity.contains("evolveWakeAsync"));
+        assertTrue(activity.contains("/wake"));
+        assertTrue(activity.contains("/listen"));
+        assertTrue(activity.contains("/transcript"));
+        assertTrue(activity.contains("/sleep"));
+    }
+
+    @Test
+    public void evolveSessionUsesHeyEvolveWakePhrase() throws Exception {
+        String activity = read("java/ai/aethon/android/MainActivity.java");
+        assertTrue(activity.contains("wake.put(\"phrase\",\"Hey Evolve\")"));
+    }
+
+    @Test
     public void activityStartsAndStopsService() throws Exception {
         String activity = read("java/ai/aethon/android/MainActivity.java");
         assertTrue(activity.contains("AndroidCommandService.start(this,base,id,token)"));
