@@ -25,7 +25,7 @@ public final class AndroidServiceLifecycleContractTest {
     @Test
     public void wakeServiceUsesEvolvePhraseAndRejectsLegacyPhrase() throws Exception {
         String wake = read("java/ai/aethon/android/WakeWordService.java");
-        assertTrue(wake.contains("WAKE_PHRASE = "hey evolve""));
+        assertTrue(wake.contains("WAKE_PHRASE = \\"hey evolve\\""));
         assertTrue(wake.contains("String[] prefixes = {"));
         assertTrue(wake.contains("WAKE_PHRASE"));
         assertTrue(!wake.contains("hey assistant"));
