@@ -1,0 +1,25 @@
+name: EVOLVE Android Build
+
+on:
+  push:
+    branches:
+      - feat/evolve-voice-agent-20260929
+  pull_request:
+
+jobs:
+  android-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - run: gradle testDebugUnitTest assembleDebug --no-daemon
