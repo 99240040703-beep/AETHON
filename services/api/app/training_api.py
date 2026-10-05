@@ -100,6 +100,5 @@ def training_export(owner_id: str = Depends(owner), only_labeled: bool = True) -
         "ok": True,
         "format": "jsonl",
         "examples": len(selected),
-        "dataset": "
-".join(output),
+        "dataset": "\n".join(output),
     }
