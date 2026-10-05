@@ -142,7 +142,7 @@ class AssistantRuntime:
                 import re
                 match = re.search(r"https?://[^\\s]+", text)
                 if match:
-                    return "web_fetch", {"url": match.group(0).rstrip(".,)")]}
+                    return "web_fetch", {"url": match.group(0).rstrip(".,)")}
             if route.tool == "calculator":
                 expression = text
                 for prefix in ("calculate", "calculator", "calc"):
