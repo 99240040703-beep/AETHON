@@ -41,13 +41,13 @@ def build_task_store():
     return TaskStore()
 
 
-app = FastAPI(title='AETHON API', version='0.1.0')
+app = FastAPI(title='ASTRA — Advanced Smart Task & Reasoning Assistant', version='0.2.0')
 store = build_task_store()
 tools = ToolRegistry()
 safety = SafetyKernel()
 safety_gate = SafetyExecutionGate(safety)
 model_router = ModelRouter()
-capabilities = CapabilityRegistry({spec.name for spec in tools.list()})
+creation_fabric = __import__('aethon.creation_provider_fabric', fromlist=['CreationProviderFabric']).CreationProviderFabric()\ncapabilities = CapabilityRegistry({spec.name for spec in tools.list()}, {item.id for item in creation_fabric.list()})
 app.include_router(voice_router)
 app.include_router(device_router)
 app.include_router(assistant_router)
