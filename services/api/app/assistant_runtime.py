@@ -459,8 +459,10 @@ class AssistantRuntime:
             # attachment evidence remain available for contextual responses.
             if self.ai_fabric.list():
                 try:
-                    result = self.ai_fabric.generate(prompt, user_text=text)
-                    response = result.text
+                    result = self.ai_fabric.generate(prompt, user_text=effective_text)
+                    response = (result.text or "").strip()
+                    if not response:
+                        raise RuntimeError("AI provider returned an empty response")
                     self._emit(events, "ai.provider.completed", request_id, event_callback,
                                provider=result.provider, model=result.model, live=result.live)
                 except Exception as provider_exc:
