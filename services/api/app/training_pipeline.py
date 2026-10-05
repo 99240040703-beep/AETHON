@@ -91,6 +91,12 @@ DEFAULT_EVALUATION_SET = (
     EvaluationCase("open this url https://example.com", expected_capability="WEB_FETCH", expected_tool="web_fetch"),
     EvaluationCase("make a bar chart from this data", expected_capability="CHART", expected_tool="chart"),
     EvaluationCase("build a website for a portfolio", expected_capability="WEBSITE_GENERATION"),
+    EvaluationCase("generate an image of a futuristic car", expected_capability="IMAGE_GENERATION"),
+    EvaluationCase("create a video about space", expected_capability="VIDEO_GENERATION"),
+    EvaluationCase("create a poster design", expected_capability="DESIGN_GENERATION"),
+    EvaluationCase("analyze this csv dataset", expected_capability="DATA_ANALYSIS", expected_tool="data_analyze"),
+    EvaluationCase("open the camera app", expected_capability="DEVICE", expected_tool="device"),
+    EvaluationCase("do this for me autonomously", expected_capability="AGENTS"),
 )
 
 
