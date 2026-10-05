@@ -5,6 +5,7 @@ from typing import Any, Callable
 from uuid import UUID, uuid4
 
 from aethon.assistant_orchestrator import AssistantIntent, AssistantMode, AssistantOrchestrator
+from aethon.intent_analyzer import IntentType
 from aethon.execution_safety_gate import ExecutionAuthorizationError, SafetyExecutionGate
 from aethon.model_router import ModelRouter
 from aethon.ai_provider_fabric import AIProviderFabric
@@ -266,6 +267,23 @@ class AssistantRuntime:
         effective_text = self._resolve_followup(text, history)
         context_text = self._context(history)
         intent = self.orchestrator.classify(effective_text, context=context_text)
+        # A website project keeps its own conversational context. Short edit requests such as
+        # "change the colors" must target the existing artifact instead of falling back to chat.
+        website_edit_markers = ("change ", "modify ", "update ", "edit ", "make it ", "add ", "remove ", "replace ")
+        if project_id and execute_tools and any(marker in effective_text.casefold() for marker in website_edit_markers):
+            try:
+                existing_website = self.website_builder.get(project_id, owner_id=owner_id)
+            except Exception:
+                existing_website = None
+            if existing_website is not None:
+                intent = AssistantIntent(
+                    AssistantMode.TASK,
+                    effective_text,
+                    "agent.task",
+                    {"goal": effective_text, "intent": IntentType.WEBSITE_GENERATION.value, "project_id": project_id},
+                    False,
+                    IntentType.WEBSITE_GENERATION,
+                )
         memory_command = self.memory.parse(text)
         if memory_command is not None:
             try:
