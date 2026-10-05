@@ -23,58 +23,62 @@ async function send(value){
   const setProgress=s=>{ if(s) content.innerHTML=text(s); };
   const finish=result=>{
     state.session=result.session_id||state.session;
-    content.innerHTML=text(String(result.response||"").replace(/^Hello! I\\x27m AETHON\\./i,"Hello! How can I help you today?"));
+    const answer=String(result.response||"");
+    content.innerHTML=text(answer||"I’m ready. What would you like me to do?");
     if(result.visualization){
       const pre=document.createElement("pre");
       pre.textContent=JSON.stringify(result.visualization,null,2);
       el.querySelector(".bubble").appendChild(pre);
     }
     if(result.requires_confirmation)toast("Confirmation required before this action.");
-    if(state.voiceReplies&&"speechSynthesis"in window)speakResponse(result.response);
+    if(state.voiceReplies&&answer&&"speechSynthesis"in window)speakResponse(answer);
     $("#messages").scrollTop=$("#messages").scrollHeight;
     loadSessions();
   };
+  const requestBody={text:q,session_id:state.session,execute_tools:true,require_approval:false,attachment_ids:attachmentIds};
   try{
-    const response=await fetch("/v1/assistant/runtime/stream",{
-      method:"POST",
-      headers:{...(state.token?{Authorization:"Bearer "+state.token}:{}),"Content-Type":"application/json","Accept":"text/event-stream"},
-      body:JSON.stringify({text:q,session_id:state.session,execute_tools:true,require_approval:false,attachment_ids:attachmentIds})
-    });
-    if(!response.ok)throw Error((await response.text()).slice(0,600)||response.statusText);
-    if(!response.body)throw Error("Streaming is not supported by this browser.");
-    const reader=response.body.getReader(), decoder=new TextDecoder();
-    let buffer="", completed=null;
-    while(true){
-      const part=await reader.read();
-      if(part.done)break;
-      buffer+=decoder.decode(part.value,{stream:true});
-      const frames=buffer.split("\\n\\n");
-      buffer=frames.pop()||"";
-      for(const frame of frames){
-        const event=(frame.match(/^event:\\s*(.+)$/m)||[])[1]||"message";
-        const data=(frame.match(/^data:\\s*(.+)$/m)||[])[1];
-        if(!data)continue;
-        let payload; try{payload=JSON.parse(data)}catch{continue}
-        if(event==="progress"){
-          const type=payload.type||"";
-          const labels={
-            "context.loaded":"Reading context…",
-            "intent.classified":"Understanding your request…",
-            "ai.provider.completed":"Generating response…",
-            "ai.provider.fallback":"Switching to another AI path…",
-            "research.fallback":"Checking current information…",
-            "response.ready":"Finalizing response…",
-            "creation.completed":"Finishing the requested creation…"
-          };
-          if(labels[type])setProgress(labels[type]);
-        }else if(event==="completed"){
-          completed=payload;
-        }else if(event==="error"){
-          throw Error(payload.error||"Assistant runtime unavailable");
+    let completed=null;
+    try{
+      const response=await fetch("/v1/assistant/runtime/stream",{
+        method:"POST",
+        headers:{...(state.token?{Authorization:"Bearer "+state.token}:{}),"Content-Type":"application/json","Accept":"text/event-stream"},
+        body:JSON.stringify(requestBody)
+      });
+      if(!response.ok)throw Error("stream "+response.status);
+      if(!response.body)throw Error("stream unavailable");
+      const reader=response.body.getReader(), decoder=new TextDecoder();
+      let buffer="";
+      while(true){
+        const part=await reader.read();
+        if(part.done)break;
+        buffer+=decoder.decode(part.value,{stream:true});
+        const frames=buffer.split("\\n\\n"); buffer=frames.pop()||"";
+        for(const frame of frames){
+          const event=(frame.match(/^event:\\s*(.+)$/m)||[])[1]||"message";
+          const data=(frame.match(/^data:\\s*(.+)$/m)||[])[1];
+          if(!data)continue;
+          let payload; try{payload=JSON.parse(data)}catch{continue}
+          if(event==="progress"){
+            const labels={"context.loaded":"Reading context…","intent.classified":"Understanding your request…","ai.provider.completed":"Generating response…","ai.provider.fallback":"Selecting another AI path…","response.ready":"Finalizing response…","creation.completed":"Finishing your creation…"};
+            if(labels[payload.type])setProgress(labels[payload.type]);
+          }else if(event==="completed")completed=payload;
+          else if(event==="error")throw Error(payload.error||"stream failed");
         }
       }
+    }catch(streamError){
+      setProgress("Preparing your response…");
     }
-    if(!completed)throw Error("The assistant ended without a response.");
+    if(!completed){
+      const response=await fetch("/v1/assistant/runtime/respond",{
+        method:"POST",
+        headers:{...(state.token?{Authorization:"Bearer "+state.token}:{}),"Content-Type":"application/json"},
+        body:JSON.stringify(requestBody)
+      });
+      const raw=await response.text();
+      let payload; try{payload=JSON.parse(raw)}catch{throw Error(raw||"assistant request failed")}
+      if(!response.ok)throw Error(payload.detail||payload.error||"assistant request failed");
+      completed=payload;
+    }
     finish(completed);
   }catch(e){
     content.innerHTML=text("I couldn’t complete that request. "+(e.message||"Please try again."));
