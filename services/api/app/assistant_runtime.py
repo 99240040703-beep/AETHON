@@ -17,6 +17,7 @@ from app.assistant_repository import AssistantRepository
 from app.tools import ToolRegistry
 from app.attachment_store import attachment_context, retrieve_attachment_context
 from app.memory_commands import NaturalMemory
+from app.capability_router import route_for
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,25 @@ class AssistantRuntime:
         )
         if any(marker in lowered for marker in fresh_markers) and len(text.split()) >= 3:
             return "web_search", {"query": text, "limit": 5}
+
+        # Unified ASTRA capability routing catches natural-language variants that do not
+        # match the legacy prefix rules above, while preserving the existing execution path.
+        route = route_for(text)
+        if route is not None and route.tool is not None:
+            if route.tool == "web_fetch":
+                import re
+                match = re.search(r"https?://[^\\s]+", text)
+                if match:
+                    return "web_fetch", {"url": match.group(0).rstrip(".,)")]}
+            if route.tool == "calculator":
+                expression = text
+                for prefix in ("calculate", "calculator", "calc"):
+                    if lowered.startswith(prefix):
+                        expression = text[len(prefix):].strip(" :")
+                        break
+                if expression:
+                    return "calculator", {"expression": expression}
+            return route.tool, {"query": text, "limit": 5} if route.tool in {"web_search", "web_research"} else {"text": text}
         return None
 
     @staticmethod
