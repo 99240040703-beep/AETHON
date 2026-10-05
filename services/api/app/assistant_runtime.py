@@ -350,10 +350,6 @@ class AssistantRuntime:
                 result = RuntimeResult(request_id, session_id, AssistantMode.TASK, intent, response,
                                    events=tuple(events), verified=verified,
                                    requires_confirmation=memory_result.get("action") == "clear_requires_confirmation")
-            self._record_training(owner_id=owner_id, session_id=session_id, request_id=request_id,
-                                  user_text=text, response=response, intent=intent, language=language,
-                                  verified=verified, success=True, metadata={"kind": "memory"})
-            return result
             except Exception as exc:
                 self._emit(events, "memory.command.failed", request_id, event_callback, error=str(exc)[:300])
                 response = f"I couldn't complete that memory operation: {exc}"
