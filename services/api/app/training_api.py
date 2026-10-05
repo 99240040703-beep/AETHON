@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from aethon.auth import current_owner, security
-from app.training_store import TrainingStore\nfrom app.training_pipeline import build_dataset, evaluate_routing\nfrom app.capability_router import route_for
+from app.training_store import TrainingStore
+from app.training_pipeline import build_dataset, evaluate_routing
+from app.capability_router import route_for
 from app.capability_router import ROUTES
 
 router = APIRouter(prefix="/v1/training", tags=["training"])
@@ -55,7 +57,24 @@ def training_feedback(request: FeedbackRequest, owner_id: str = Depends(owner)) 
     return {"ok": True, "example_id": request.example_id}
 
 
-@router.get("/quality")\ndef training_quality(owner_id: str = Depends(owner)) -> dict:\n    rows = store.list(owner_id, limit=1000)\n    selected = build_dataset(rows)\n    return {\n        "ok": True,\n        "input_examples": len(rows),\n        "selected_examples": len(selected),\n        "selection_rate": round(len(selected) / len(rows), 4) if rows else 0.0,\n    }\n\n\n@router.get("/evaluation/routing")\ndef routing_evaluation() -> dict:\n    return {"ok": True, **evaluate_routing(route_for)}\n\n\n@router.get("/export")
+@router.get("/quality")
+def training_quality(owner_id: str = Depends(owner)) -> dict:
+    rows = store.list(owner_id, limit=1000)
+    selected = build_dataset(rows)
+    return {
+        "ok": True,
+        "input_examples": len(rows),
+        "selected_examples": len(selected),
+        "selection_rate": round(len(selected) / len(rows), 4) if rows else 0.0,
+    }
+
+
+@router.get("/evaluation/routing")
+def routing_evaluation() -> dict:
+    return {"ok": True, **evaluate_routing(route_for)}
+
+
+@router.get("/export")
 def training_export(owner_id: str = Depends(owner), only_labeled: bool = True) -> dict:
     rows = store.list(owner_id, limit=1000, only_labeled=only_labeled)
     selected = build_dataset(rows)
@@ -81,5 +100,6 @@ def training_export(owner_id: str = Depends(owner), only_labeled: bool = True) -
         "ok": True,
         "format": "jsonl",
         "examples": len(selected),
-        "dataset": "\n".join(output),
+        "dataset": "
+".join(output),
     }
