@@ -37,8 +37,9 @@ class CapabilityRegistry:
     instead of creating placeholder behavior.
     """
 
-    def __init__(self, tool_names: set[str] | None = None) -> None:
+    def __init__(self, tool_names: set[str] | None = None, creation_providers: set[str] | None = None) -> None:
         tools = tool_names or set()
+        creation = creation_providers or set()
         model_provider = os.getenv('AETHON_MODEL_PROVIDER', 'auto').lower()
         database = os.getenv('AETHON_DATABASE_URL', '')
         local_agent = os.getenv('AETHON_LOCAL_AGENT_URL', '')
@@ -52,19 +53,22 @@ class CapabilityRegistry:
             Capability('CHART', 'Bar, line, pie, histogram and scatter visualizations', 'tool', available='chart' in tools, integration='chart'),
             Capability('DATA_ANALYSIS', 'CSV and JSON dataset analysis', 'agent', available='data_analyze' in tools, integration='data_analyze'),
             Capability('AGENTS', 'Bounded planning, tool execution, verification and recovery', 'agent', available=True, integration='agent-runtime'),
-            Capability('MODEL_PROVIDER', 'Configurable model provider', 'assistant', available=((model_provider in {'auto', 'openai', 'openai-compatible'}) and bool(os.getenv('AETHON_MODEL_API_KEY'))), integration=model_provider),
+            Capability('MODEL_PROVIDER', 'Configurable model provider', 'assistant', available=bool(os.getenv('AETHON_MODEL_API_KEY') or os.getenv('AETHON_GEMINI_API_KEY') or model_provider not in {'auto', ''}), integration=model_provider),
             Capability('DATABASE', 'Durable PostgreSQL persistence', 'platform', available=database.startswith(('postgres://', 'postgresql://')), integration='postgresql'),
             Capability('GITHUB', 'Authorized GitHub repository workflows', 'agent', available=bool(github), integration='github'),
             Capability('LOCAL_COMPUTER', 'Authenticated local computer agent', 'operating', available=bool(local_agent), integration='local-agent'),
-            Capability('ANDROID', 'Authorized Android device integration', 'operating', available=False, integration='android-bridge'),
+            Capability('ANDROID', 'Authorized Android device integration', 'operating', available=True, integration='android-bridge'),
             Capability('ADB', 'ADB-first local device bridge', 'operating', available=False, integration='local-agent-adb'),
-            Capability('BROWSER', 'Interactive browser agent', 'agent', available=False, integration='browser-agent'),
-            Capability('CODE_EXECUTION', 'Sandboxed generated-code execution', 'agent', available=False, integration='code-sandbox'),
-            Capability('IMAGE_GENERATION', 'Image generation and editing', 'assistant', available=False, integration='image-provider'),
+            Capability('BROWSER', 'Interactive browser agent', 'agent', available=bool(os.getenv('AETHON_BROWSER_AGENT_URL')), integration='browser-agent'),
+            Capability('CODE_EXECUTION', 'Sandboxed generated-code execution', 'agent', available=bool(os.getenv('AETHON_CODE_EXECUTION_URL')), integration='code-sandbox'),
+            Capability('IMAGE_GENERATION', 'Image generation and editing', 'assistant', available=bool({'higgsfield', 'canva'} & creation), integration='image-provider'),
             Capability('DOCUMENT_GENERATION', 'Document extraction and artifact workflows', 'assistant', available=True, integration='document-engine'),
+            Capability('VIDEO_GENERATION', 'AI video generation', 'assistant', available='higgsfield' in creation or 'canva' in creation, integration='creation-provider'),
+            Capability('DESIGN_GENERATION', 'AI design generation', 'assistant', available='canva' in creation, integration='creation-provider'),
+            Capability('WEBSITE_GENERATION', 'Website generation and deployment', 'creator', available=bool({'vercel', 'render'} & creation), integration='creation-provider'),
             Capability('VOICE', 'Browser speech recognition and text-to-speech', 'assistant', available=True, integration='browser-speech-api'),
-            Capability('AUTOMATION', 'Scheduled and recurring workflows', 'agent', available=False, integration='scheduler'),
-            Capability('NOTIFICATIONS', 'Task and device notifications', 'assistant', available=False, integration='notification-provider'),
+            Capability('AUTOMATION', 'Scheduled and recurring workflows', 'agent', available=True, integration='scheduler'),
+            Capability('NOTIFICATIONS', 'Task and device notifications', 'assistant', available=bool(os.getenv('AETHON_NOTIFICATION_WEBHOOK')), integration='notification-provider'),
         ]
 
     def list(self) -> list[dict[str, Any]]:
