@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from aethon.auth import current_owner, security
 from app.training_store import TrainingStore\nfrom app.training_pipeline import build_dataset, evaluate_routing\nfrom app.capability_router import route_for
+from app.capability_router import ROUTES
 
 router = APIRouter(prefix="/v1/training", tags=["training"])
 store = TrainingStore()
