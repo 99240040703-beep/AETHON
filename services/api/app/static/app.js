@@ -10,8 +10,78 @@ function setView(name){$$(".view").forEach(x=>x.classList.toggle("active",x.id==
 function addMessage(role,content){$("#welcome").style.display="none";const el=document.createElement("article");el.className="message "+role;el.innerHTML='<div class="avatar">'+(role==="user"?"YOU":"A")+'</div><div class="bubble"><small>'+(role==="user"?"You":"Assistant")+'</small><div class="content">'+text(content)+'</div></div>';$("#messages").appendChild(el);$("#messages").scrollTop=$("#messages").scrollHeight;return el}
 function renderAttachments(){$("#attachmentList").innerHTML=state.attachments.map((a,i)=>'<span>'+esc(a.filename)+' <button data-rm="'+i+'">×</button></span>').join("")}
 async function uploadFiles(files){for(const f of [...files].slice(0,5-state.attachments.length)){const fd=new FormData();fd.append("file",f);try{const r=await api("/v1/assistant/runtime/attachments",{method:"POST",body:fd});state.attachments.push(r)}catch(e){toast("Attachment failed: "+e.message)}}renderAttachments()}
-async function send(value){const q=(value||$("#input").value).trim();if(!q||state.busy)return;$("#input").value="";const attachmentIds=state.attachments.map(x=>x.attachment_id);state.attachments=[];renderAttachments();addMessage("user",q);state.busy=true;$("#typing").classList.add("on");const el=addMessage("assistant","Thinking…");let result;
-try{result=await api("/v1/assistant/runtime/respond",{method:"POST",body:JSON.stringify({text:q,session_id:state.session,execute_tools:true,require_approval:false,attachment_ids:attachmentIds})});state.session=result.session_id;el.querySelector(".content").innerHTML=text(String(result.response||"").replace(/^Hello! I\x27m AETHON\./i,"Hello! How can I help you today?"));if(result.visualization){const pre=document.createElement("pre");pre.textContent=JSON.stringify(result.visualization,null,2);el.querySelector(".bubble").appendChild(pre)}if(result.requires_confirmation)toast("Confirmation required before this action.");if(state.voiceReplies&&"speechSynthesis"in window){speechSynthesis.cancel();speakResponse(result.response)}$("#messages").scrollTop=$("#messages").scrollHeight}catch(e){el.querySelector(".content").innerHTML=text("I couldn’t complete that request. "+e.message)}finally{state.busy=false;$("#typing").classList.remove("on")}}
+async function send(value){
+  const q=(value||$("#input").value).trim();
+  if(!q||state.busy)return;
+  $("#input").value="";
+  const attachmentIds=state.attachments.map(x=>x.attachment_id);
+  state.attachments=[]; renderAttachments();
+  addMessage("user",q);
+  state.busy=true; $("#typing").classList.add("on");
+  const el=addMessage("assistant","Thinking…");
+  const content=el.querySelector(".content");
+  const setProgress=s=>{ if(s) content.innerHTML=text(s); };
+  const finish=result=>{
+    state.session=result.session_id||state.session;
+    content.innerHTML=text(String(result.response||"").replace(/^Hello! I\\x27m AETHON\\./i,"Hello! How can I help you today?"));
+    if(result.visualization){
+      const pre=document.createElement("pre");
+      pre.textContent=JSON.stringify(result.visualization,null,2);
+      el.querySelector(".bubble").appendChild(pre);
+    }
+    if(result.requires_confirmation)toast("Confirmation required before this action.");
+    if(state.voiceReplies&&"speechSynthesis"in window)speakResponse(result.response);
+    $("#messages").scrollTop=$("#messages").scrollHeight;
+    loadSessions();
+  };
+  try{
+    const response=await fetch("/v1/assistant/runtime/stream",{
+      method:"POST",
+      headers:{...(state.token?{Authorization:"Bearer "+state.token}:{}),"Content-Type":"application/json","Accept":"text/event-stream"},
+      body:JSON.stringify({text:q,session_id:state.session,execute_tools:true,require_approval:false,attachment_ids:attachmentIds})
+    });
+    if(!response.ok)throw Error((await response.text()).slice(0,600)||response.statusText);
+    if(!response.body)throw Error("Streaming is not supported by this browser.");
+    const reader=response.body.getReader(), decoder=new TextDecoder();
+    let buffer="", completed=null;
+    while(true){
+      const part=await reader.read();
+      if(part.done)break;
+      buffer+=decoder.decode(part.value,{stream:true});
+      const frames=buffer.split("\\n\\n");
+      buffer=frames.pop()||"";
+      for(const frame of frames){
+        const event=(frame.match(/^event:\\s*(.+)$/m)||[])[1]||"message";
+        const data=(frame.match(/^data:\\s*(.+)$/m)||[])[1];
+        if(!data)continue;
+        let payload; try{payload=JSON.parse(data)}catch{continue}
+        if(event==="progress"){
+          const type=payload.type||"";
+          const labels={
+            "context.loaded":"Reading context…",
+            "intent.classified":"Understanding your request…",
+            "ai.provider.completed":"Generating response…",
+            "ai.provider.fallback":"Switching to another AI path…",
+            "research.fallback":"Checking current information…",
+            "response.ready":"Finalizing response…",
+            "creation.completed":"Finishing the requested creation…"
+          };
+          if(labels[type])setProgress(labels[type]);
+        }else if(event==="completed"){
+          completed=payload;
+        }else if(event==="error"){
+          throw Error(payload.error||"Assistant runtime unavailable");
+        }
+      }
+    }
+    if(!completed)throw Error("The assistant ended without a response.");
+    finish(completed);
+  }catch(e){
+    content.innerHTML=text("I couldn’t complete that request. "+(e.message||"Please try again."));
+  }finally{
+    state.busy=false; $("#typing").classList.remove("on");
+  }
+}
 async function loadSessions(){try{const r=await api("/v1/assistant/sessions?limit=30");const xs=r.sessions||r||[];$("#sessions").innerHTML=xs.map(s=>'<button class="session" data-id="'+esc(s.session_id)+'">◌ <span>'+esc(s.title||"Conversation")+'</span></button>').join("")}catch{}}
 async function loadAgents(){try{const r=await api("/v1/agents");$("#agentList").innerHTML=(r.agents||[]).map(a=>'<article class="card"><div><b>'+esc(a.name||a.id||"Agent")+'</b><p>'+esc(a.description||"Specialist ASTRA agent")+'</p></div><span class="badge">READY</span></article>').join("")||'<div class="empty">No agents available.</div>'}catch(e){$("#agentList").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}}
 async function loadFactory(){try{const r=await api("/v1/ai-factory");const xs=r.agents||[];$("#factoryList").innerHTML=xs.map(a=>factoryCard(a)).join("")||'<div class="empty">Create your first AI agent above.</div>'}catch(e){$("#factoryList").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}}
