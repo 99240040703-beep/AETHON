@@ -18,6 +18,7 @@ from app.tools import ToolRegistry
 from app.attachment_store import attachment_context, retrieve_attachment_context
 from app.memory_commands import NaturalMemory
 from app.capability_router import route_for
+from app.training_store import TrainingStore
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,23 @@ class AssistantRuntime:
         self.event_sink = event_sink
         self.memory = NaturalMemory()
         self.website_builder = WebsiteBuilder(ai_fabric=self.ai_fabric, repository=self.memory.repository)
+        self.training = TrainingStore()
+
+    def _record_training(self, *, owner_id: str, session_id: str, request_id: str,
+                         user_text: str, response: str, intent: AssistantIntent,
+                         language: str, verified: bool, success: bool,
+                         tool: str | None = None, metadata: dict | None = None) -> None:
+        try:
+            self.training.record(
+                owner_id=owner_id, session_id=session_id, request_id=request_id,
+                user_text=user_text, assistant_text=response,
+                capability=intent.intent_type.value if intent.intent_type else None,
+                tool=tool, mode=intent.mode.value, language=language,
+                verified=verified, success=success, metadata=metadata or {},
+            )
+        except Exception:
+            # Training capture must never break the assistant response path.
+            pass
 
     def _emit(self, events: list[RuntimeEvent], event_type: str, request_id: str,
               event_callback: Callable[[RuntimeEvent], None] | None = None,
@@ -329,16 +347,24 @@ class AssistantRuntime:
                 self.repository.add_message(session_id, owner_id, "assistant", response, language,
                                             intent="memory", status="VERIFIED" if verified else "AWAITING_APPROVAL",
                                             metadata={"request_id": request_id, "memory": memory_result})
-                return RuntimeResult(request_id, session_id, AssistantMode.TASK, intent, response,
-                                     events=tuple(events), verified=verified,
-                                     requires_confirmation=memory_result.get("action") == "clear_requires_confirmation")
+                result = RuntimeResult(request_id, session_id, AssistantMode.TASK, intent, response,
+                                   events=tuple(events), verified=verified,
+                                   requires_confirmation=memory_result.get("action") == "clear_requires_confirmation")
+            self._record_training(owner_id=owner_id, session_id=session_id, request_id=request_id,
+                                  user_text=text, response=response, intent=intent, language=language,
+                                  verified=verified, success=True, metadata={"kind": "memory"})
+            return result
             except Exception as exc:
                 self._emit(events, "memory.command.failed", request_id, event_callback, error=str(exc)[:300])
                 response = f"I couldn't complete that memory operation: {exc}"
                 self.repository.add_message(session_id, owner_id, "assistant", response, language,
                                             intent="memory", status="FAILED", metadata={"request_id": request_id})
-                return RuntimeResult(request_id, session_id, AssistantMode.TASK, intent, response,
-                                     events=tuple(events), error=str(exc))
+                result = RuntimeResult(request_id, session_id, AssistantMode.TASK, intent, response,
+                                   events=tuple(events), error=str(exc))
+            self._record_training(owner_id=owner_id, session_id=session_id, request_id=request_id,
+                                  user_text=text, response=response, intent=intent, language=language,
+                                  verified=False, success=False, metadata={"kind": "memory", "error": type(exc).__name__})
+            return result
 
         attachment_ids = attachment_ids or []
         attachment_text, attachment_names = attachment_context(attachment_ids, owner_id)
@@ -354,8 +380,12 @@ class AssistantRuntime:
                                         metadata={"request_id": request_id, "verified": False})
             self._emit(events, "action.planned", request_id, event_callback,
                        requires_confirmation=intent.requires_confirmation)
-            return RuntimeResult(request_id, session_id, intent.mode, intent, response,
-                                 events=tuple(events), requires_confirmation=intent.requires_confirmation)
+            result = RuntimeResult(request_id, session_id, intent.mode, intent, response,
+                                   events=tuple(events), requires_confirmation=intent.requires_confirmation)
+            self._record_training(owner_id=owner_id, session_id=session_id, request_id=request_id,
+                                  user_text=text, response=response, intent=intent, language=language,
+                                  verified=False, success=True, metadata={"kind": "action_plan"})
+            return result
 
         creation_capabilities = {
             "IMAGE_GENERATION": "image",
@@ -375,7 +405,11 @@ class AssistantRuntime:
                     intent="website_generation", status="SUCCEEDED",
                     metadata={"request_id": request_id, "project_id": project_id, "artifact": artifact})
                 self._emit(events, "creation.completed", request_id, event_callback, capability="website", status="updated", has_result_url=False)
-                return RuntimeResult(request_id, session_id, intent.mode, intent, response, events=tuple(events), verified=True, visualization=artifact)
+                result = RuntimeResult(request_id, session_id, intent.mode, intent, response, events=tuple(events), verified=True, visualization=artifact)
+                self._record_training(owner_id=owner_id, session_id=session_id, request_id=request_id,
+                                      user_text=text, response=response, intent=intent, language=language,
+                                      verified=True, success=True, metadata={"kind": "website_update"})
+                return result
             except Exception as exc:
                 self._emit(events, "creation.update_failed", request_id, event_callback, capability="website", reason=type(exc).__name__)
         if capability and execute_tools:
@@ -393,7 +427,11 @@ class AssistantRuntime:
                             intent=intent.intent_type.value.lower(), status="SUCCEEDED",
                             metadata={"request_id": request_id, "project_id": build.project_id, "artifact": artifact})
                         self._emit(events, "creation.completed", request_id, event_callback, capability=capability, status="built", has_result_url=False)
-                        return RuntimeResult(request_id, session_id, intent.mode, intent, response, events=tuple(events), verified=True, visualization=artifact)
+                        result = RuntimeResult(request_id, session_id, intent.mode, intent, response, events=tuple(events), verified=True, visualization=artifact)
+                        self._record_training(owner_id=owner_id, session_id=session_id, request_id=request_id,
+                                              user_text=text, response=response, intent=intent, language=language,
+                                              verified=True, success=True, metadata={"kind": "website_build"})
+                        return result
                 else:
                     creation = self.creation_fabric.dispatch(capability, {"prompt": text})
                 output = creation.output if isinstance(creation.output, dict) else {}
@@ -424,8 +462,13 @@ class AssistantRuntime:
                 )
                 self._emit(events, "creation.completed", request_id, event_callback,
                            capability=capability, status=creation.status, has_result_url=bool(result_url))
-                return RuntimeResult(request_id, session_id, intent.mode, intent, response,
-                                     events=tuple(events), verified=bool(result_url))
+                result = RuntimeResult(request_id, session_id, intent.mode, intent, response,
+                                       events=tuple(events), verified=bool(result_url))
+                self._record_training(owner_id=owner_id, session_id=session_id, request_id=request_id,
+                                      user_text=text, response=response, intent=intent, language=language,
+                                      verified=bool(result_url), success=status not in {"failed", "error"},
+                                      metadata={"kind": "creation", "status": creation.status})
+                return result
             except Exception as exc:
                 self._emit(events, "creation.unavailable", request_id, event_callback,
                            capability=capability, reason=type(exc).__name__)
@@ -438,8 +481,12 @@ class AssistantRuntime:
                     intent=intent.intent_type.value.lower(), status="FAILED",
                     metadata={"request_id": request_id},
                 )
-                return RuntimeResult(request_id, session_id, intent.mode, intent, response,
-                                     events=tuple(events), error=f"{capability} provider unavailable")
+                result = RuntimeResult(request_id, session_id, intent.mode, intent, response,
+                                       events=tuple(events), error=f"{capability} provider unavailable")
+                self._record_training(owner_id=owner_id, session_id=session_id, request_id=request_id,
+                                      user_text=text, response=response, intent=intent, language=language,
+                                      verified=False, success=False, metadata={"kind": "creation", "error": type(exc).__name__})
+                return result
 
         tool = self._tool_intent(intent)
         if tool is not None and execute_tools:
@@ -461,6 +508,10 @@ class AssistantRuntime:
                                         intent=tool_name, status=status,
                                         metadata={"request_id": request_id, "verified": result.verified,
                                                   "requires_confirmation": result.requires_confirmation})
+            self._record_training(owner_id=owner_id, session_id=session_id, request_id=request_id,
+                                  user_text=text, response=result.response, intent=intent, language=language,
+                                  verified=result.verified, success=bool(result.tool_result and result.tool_result.ok),
+                                  tool=tool_name, metadata={"kind": "tool", "requires_confirmation": result.requires_confirmation})
             return result
 
         context = self._context(history)
@@ -512,6 +563,11 @@ class AssistantRuntime:
         self.repository.add_message(session_id, owner_id, "assistant", response, language,
                                     status=status, metadata={"request_id": request_id, "verified": status == "VERIFIED"})
         self._emit(events, "response.ready", request_id, event_callback, status=status)
-        return RuntimeResult(request_id, session_id, intent.mode, intent, response,
-                             events=tuple(events), verified=status == "VERIFIED",
-                             error=None if status != "FAILED" else "model generation failed")
+        result = RuntimeResult(request_id, session_id, intent.mode, intent, response,
+                               events=tuple(events), verified=status == "VERIFIED",
+                               error=None if status != "FAILED" else "model generation failed")
+        self._record_training(owner_id=owner_id, session_id=session_id, request_id=request_id,
+                              user_text=text, response=response, intent=intent, language=language,
+                              verified=result.verified, success=result.error is None,
+                              metadata={"kind": "chat"})
+        return result
