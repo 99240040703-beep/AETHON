@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from aethon.auth import current_owner, security
-from app.training_store import TrainingStore
+from app.training_store import TrainingStore\nfrom app.training_pipeline import build_dataset, evaluate_routing\nfrom app.capability_router import route_for
 
 router = APIRouter(prefix="/v1/training", tags=["training"])
 store = TrainingStore()
@@ -54,7 +54,7 @@ def training_feedback(request: FeedbackRequest, owner_id: str = Depends(owner)) 
     return {"ok": True, "example_id": request.example_id}
 
 
-@router.get("/export")
+@router.get("/quality")\ndef training_quality(owner_id: str = Depends(owner)) -> dict:\n    rows = store.list(owner_id, limit=1000)\n    selected = build_dataset(rows)\n    return {\n        "ok": True,\n        "input_examples": len(rows),\n        "selected_examples": len(selected),\n        "selection_rate": round(len(selected) / len(rows), 4) if rows else 0.0,\n    }\n\n\n@router.get("/evaluation/routing")\ndef routing_evaluation() -> dict:\n    return {"ok": True, **evaluate_routing(route_for)}\n\n\n@router.get("/export")
 def training_export(owner_id: str = Depends(owner), only_labeled: bool = True) -> dict:
     return {
         "ok": True,
