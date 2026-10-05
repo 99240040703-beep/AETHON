@@ -56,9 +56,29 @@ def training_feedback(request: FeedbackRequest, owner_id: str = Depends(owner)) 
 
 @router.get("/quality")\ndef training_quality(owner_id: str = Depends(owner)) -> dict:\n    rows = store.list(owner_id, limit=1000)\n    selected = build_dataset(rows)\n    return {\n        "ok": True,\n        "input_examples": len(rows),\n        "selected_examples": len(selected),\n        "selection_rate": round(len(selected) / len(rows), 4) if rows else 0.0,\n    }\n\n\n@router.get("/evaluation/routing")\ndef routing_evaluation() -> dict:\n    return {"ok": True, **evaluate_routing(route_for)}\n\n\n@router.get("/export")
 def training_export(owner_id: str = Depends(owner), only_labeled: bool = True) -> dict:
+    rows = store.list(owner_id, limit=1000, only_labeled=only_labeled)
+    selected = build_dataset(rows)
+    output = []
+    for item in selected:
+        output.append(__import__("json").dumps({
+            "messages": [
+                {"role": "user", "content": item.user_text},
+                {"role": "assistant", "content": item.assistant_text},
+            ],
+            "metadata": {
+                "capability": item.capability,
+                "tool": item.tool,
+                "mode": item.mode,
+                "language": item.language,
+                "verified": item.verified,
+                "success": item.success,
+                "feedback": item.feedback,
+                "score": item.score,
+            },
+        }, ensure_ascii=False))
     return {
         "ok": True,
         "format": "jsonl",
-        "examples": len(store.list(owner_id, limit=1000, only_labeled=only_labeled)),
-        "dataset": store.export_jsonl(owner_id, only_labeled=only_labeled),
+        "examples": len(selected),
+        "dataset": "\n".join(output),
     }
