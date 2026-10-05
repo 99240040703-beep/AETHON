@@ -68,6 +68,22 @@ class WebsiteBuilder:
                 pass
         return self._fallback(prompt),"template"
 
+    def _edit_generate(self, files: dict[str, str], instruction: str) -> tuple[dict[str, str], str]:
+        prompt = (
+            "Edit the existing static website, not a new website. Apply ONLY the requested change and preserve all unrelated content, behavior, links and structure. "
+            "Return ONLY JSON with a files object. Allowed files: index.html, styles.css, app.js, README.md. "
+            "Return all four files so the project remains complete. User request: " + instruction + "\\nExisting files:\\n" + json.dumps(files)
+        )
+        if self.ai_fabric.list():
+            try:
+                result = self.ai_fabric.generate(prompt, user_text=instruction)
+                parsed = self._parse(result.text)
+                if parsed:
+                    return parsed, "ai"
+            except Exception:
+                pass
+        return self._edit_fallback(files, instruction), "template"
+
     def build(self, prompt: str, *, owner_id: str, project_id: str | None = None) -> WebsiteBuild:
         if not prompt.strip(): raise ValueError("website prompt cannot be empty")
         target_project=project_id or str(uuid4())
@@ -106,9 +122,7 @@ class WebsiteBuilder:
             f"User request: {instruction}\nExisting files:\n"
             + json.dumps(current.files)
         )
-        files, source = self._generate(prompt)
-        if source == "template":
-            files = self._edit_fallback(current.files, instruction)
+        files, source = self._edit_generate(current.files, instruction)
         self.repository.put(
             "website:" + project_id,
             json.dumps({"project_id": project_id, "prompt": instruction.strip(), "files": files, "source": source}),
