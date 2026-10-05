@@ -218,12 +218,14 @@ class AssistantRuntime:
         self._emit(events, "tool.completed", request_id, event_callback,
                    tool=spec.name, ok=result.ok, verified=result.verified)
         visualization = result.output if request.tool == "chart" and result.ok and isinstance(result.output, dict) else None
-        response = (
-            f"Created {visualization.get('chartType', 'chart')} chart: {visualization.get('meta', {}).get('title', 'Chart')}."
-            if visualization else
-            self._format_tool_response(request.tool, result.output) if result.ok else
-            f"I couldn't complete that tool request: {result.error or 'unknown error'}"
-        )
+        if visualization:
+            response = f"Created {visualization.get('chartType', 'chart')} chart: {visualization.get('meta', {}).get('title', 'Chart')}."
+        elif result.ok:
+            response = self._format_tool_response(request.tool, result.output)
+        elif request.tool in {"web_search", "web_research"}:
+            response = "I couldn't reach the web-search service just now. I can still answer from my available knowledge, or you can try the research request again."
+        else:
+            response = "I couldn't complete that request right now. Please try again."
         return RuntimeResult(request_id, session_id, intent.mode, intent, response, result, tuple(events),
                              verified=result.verified,
                              action_authorized=bool(spec.side_effects and result.ok),
