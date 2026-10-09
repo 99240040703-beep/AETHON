@@ -112,7 +112,7 @@ def test_ollama_provider_returns_only_message_content(monkeypatch):
     assert seen["json"]["stream"] is False
     assert seen["json"]["think"] is False
     assert seen["json"]["options"]["num_predict"] == 128
-    assert seen["json"]["messages"][1]["content"].startswith("/no_think\\n")
+    assert seen["json"]["messages"][1]["content"].startswith("/no_think\n")
 
 
 def test_ollama_provider_can_be_selected_from_environment(monkeypatch):
