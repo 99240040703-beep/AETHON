@@ -206,6 +206,66 @@ class OpenAICompatibleProvider:
         except (httpx.HTTPError,OSError): return False
 
 
+class OllamaProvider:
+    """Local Ollama chat provider. Intended for AETHON running on the same PC as Ollama."""
+
+    name = "ollama"
+
+    def __init__(self, base_url: str, model: str, timeout: float = 120.0) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.timeout = timeout
+
+    def generate(self, prompt: str, user_text: str | None = None) -> str:
+        # Qwen3 may include internal reasoning in its separate "thinking" field.
+        # Request no-think mode and return only the user-facing message content.
+        user_message = (user_text or prompt).strip()
+        if not user_message:
+            user_message = "Please help me."
+        if self.model.lower().startswith("qwen3") and "/no_think" not in user_message:
+            user_message = "/no_think\n" + user_message
+        payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are ASTRA, AETHON's helpful AI assistant. Respond naturally and directly. "
+                        "Support English, Telugu, Hindi, Tamil, and mixed-language messages. "
+                        "Do not claim tools, web research, or device actions happened unless verified."
+                    ),
+                },
+                {"role": "user", "content": user_message},
+            ],
+            "stream": False,
+            "think": False,
+            "options": {"num_predict": int(os.getenv("AETHON_OLLAMA_NUM_PREDICT", "512"))},
+        }
+        try:
+            response = httpx.post(
+                f"{self.base_url}/api/chat",
+                json=payload,
+                timeout=self.timeout,
+            )
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise RuntimeError("local Ollama request failed") from exc
+        if response.status_code >= 400:
+            raise RuntimeError(f"local Ollama returned HTTP {response.status_code}")
+        data = response.json()
+        message = data.get("message")
+        text = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(text, str) or not text.strip():
+            raise RuntimeError("local Ollama returned no user-facing text")
+        return text.strip()
+
+    def health(self) -> bool:
+        try:
+            response = httpx.get(f"{self.base_url}/api/tags", timeout=5.0)
+            return response.is_success
+        except (httpx.HTTPError, OSError):
+            return False
+
+
 class ModelRouter:
     def __init__(self,provider:ModelProvider|None=None): self.provider=provider or self._from_environment()
     @staticmethod
@@ -215,6 +275,11 @@ class ModelRouter:
             api_key=os.getenv("AETHON_MODEL_API_KEY","").strip()
             provider = "openai" if api_key else "deterministic"
         if provider=="deterministic": return LocalIntelligenceProvider()
+        if provider=="ollama":
+            base_url=os.getenv("AETHON_MODEL_BASE_URL","http://127.0.0.1:11434")
+            model=os.getenv("AETHON_MODEL_NAME","qwen3:4b")
+            timeout=float(os.getenv("AETHON_MODEL_TIMEOUT","120"))
+            return OllamaProvider(base_url,model,timeout=timeout)
         if provider=="openai":
             base_url=os.getenv("AETHON_MODEL_BASE_URL","https://api.openai.com/v1");model=os.getenv("AETHON_MODEL_NAME","gpt-5.6-luna");api_key=os.getenv("AETHON_MODEL_API_KEY","")
             if not api_key: raise RuntimeError("AETHON_MODEL_API_KEY is required when AETHON_MODEL_PROVIDER=openai")
