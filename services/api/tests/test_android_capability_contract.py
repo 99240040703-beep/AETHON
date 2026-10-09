@@ -5,6 +5,13 @@ import pytest
 from aethon.device_gateway import Capability, CommandEnvelope, DeviceGateway, GatewayError
 
 
+@pytest.fixture(autouse=True)
+def isolate_gateway_unit_tests_from_shared_database(monkeypatch):
+    # Contract tests use isolated in-memory gateway state; persistence has dedicated tests.
+    monkeypatch.delenv("AETHON_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+
 ANDROID_CAPABILITIES = {
     "SCREEN_READ", "APP_LIST", "DEVICE_INFO", "NETWORK_STATUS", "BATTERY_READ", "VOLUME_READ",
     "OPEN_APP", "MEDIA_PLAY", "MEDIA_PAUSE", "MEDIA_STOP", "VOLUME_SET",
