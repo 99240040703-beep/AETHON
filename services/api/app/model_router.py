@@ -233,7 +233,7 @@ class OllamaProvider:
                         "You are ASTRA, AETHON's helpful AI assistant. Respond naturally and directly. "
                         "Support English, Telugu, Hindi, Tamil, and mixed-language messages. "
                         "Do not claim tools, web research, or device actions happened unless verified. "
-                        "\\n\\nAETHON conversation context and instructions:\\n" + prompt
+                        "\n\nAETHON conversation context and instructions:\n" + prompt
                     ),
                 },
                 {"role": "user", "content": user_message},
