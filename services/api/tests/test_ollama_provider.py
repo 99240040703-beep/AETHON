@@ -12,6 +12,7 @@ def test_ollama_response_returns_only_final_content(monkeypatch):
         return httpx.Response(
             200,
             json={"message": {"content": "Hello from ASTRA", "thinking": "not shown"}},
+            request=httpx.Request("POST", url),
         )
 
     monkeypatch.setattr(httpx, "post", fake_post)
