@@ -49,3 +49,14 @@ Check `http://127.0.0.1:8000/v1/model/health` and use the local AETHON chat UI/A
 - Do not expose the Ollama port directly to the public internet.
 - Use a VPN or authenticated private gateway if you later need a cloud service to call a local model; do not use an unauthenticated public tunnel.
 - Cloud and local models can produce different answers. A cloud deployment does not silently claim to be using your PC's Qwen model.
+
+
+## Smoke-test prompts
+
+After configuring a real provider, send these through the existing ASTRA chat interface:
+
+1. `Explain what an API is in three simple sentences.`
+2. `తెలుగులో AI అంటే ఏమిటో వివరించు.`
+3. `Summarize that in one sentence.`
+
+The third prompt checks whether the runtime passes conversation context into the provider. Confirm that the service health and model health endpoints work before diagnosing chat behavior. A healthy process alone does not prove that the model key or model name is valid; the first real chat request is the end-to-end check.
