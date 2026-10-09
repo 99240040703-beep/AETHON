@@ -9,6 +9,13 @@ from aethon.security import SafetyKernel
 from aethon.voice_api import VoiceRequest, respond
 
 
+@pytest.fixture(autouse=True)
+def isolate_gateway_unit_tests_from_shared_database(monkeypatch):
+    # Unit tests need per-instance in-memory state, not the CI PostgreSQL registry.
+    monkeypatch.delenv("AETHON_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+
 def test_voice_request_limits_and_telugu_fallback(monkeypatch):
     monkeypatch.setattr("aethon.voice_api.model_router", type("R", (), {"generate": lambda self, prompt: (_ for _ in ()).throw(RuntimeError("offline")), "provider": type("P", (), {"name": "test"})()})())
     result = respond(VoiceRequest(transcript="నా ఫోన్ బ్యాటరీ ఎంత?", language="te-IN"), owner_id="owner-1")
