@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class ModelProvider(Protocol):
@@ -217,14 +220,35 @@ class OllamaProvider:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.access_client_id = os.getenv("OLLAMA_ACCESS_CLIENT_ID", "").strip()
+        self.access_client_secret = os.getenv("OLLAMA_ACCESS_CLIENT_SECRET", "").strip()
+
+    def _headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        # Cloudflare Access service-token authentication; never put tokens in the URL.
+        if self.access_client_id and self.access_client_secret:
+            headers["CF-Access-Client-Id"] = self.access_client_id
+            headers["CF-Access-Client-Secret"] = self.access_client_secret
+        return headers
 
     def generate(self, prompt: str, user_text: str | None = None) -> str:
-        system = ("You are AETHON, a helpful general-purpose AI assistant. Answer the user's actual question directly, preserve conversation context, support multilingual messages including Telugu and Hindi, and never claim tools or actions succeeded unless they were actually run and verified.")
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
-        if user_text and user_text.strip() and user_text.strip() not in prompt:
-            messages.append({"role": "user", "content": user_text.strip()})
+        system = (
+            "You are AETHON, a helpful general-purpose AI assistant. Answer the user's actual "
+            "question directly, preserve conversation context, support multilingual messages "
+            "including Telugu and Hindi, and never claim tools or actions succeeded unless they "
+            "were actually run and verified.\n\n" + prompt
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": (user_text or prompt).strip()},
+        ]
         try:
-            response = httpx.post(f"{self.base_url}/api/chat", json={"model": self.model, "messages": messages, "stream": False}, timeout=self.timeout)
+            response = httpx.post(
+                f"{self.base_url}/api/chat",
+                headers=self._headers(),
+                json={"model": self.model, "messages": messages, "stream": False},
+                timeout=self.timeout,
+            )
         except (httpx.HTTPError, OSError) as exc:
             raise RuntimeError(f"Ollama is unreachable ({type(exc).__name__}); ensure the configured Ollama API endpoint is reachable from AETHON.") from exc
         if response.status_code >= 400:
@@ -240,7 +264,7 @@ class OllamaProvider:
 
     def health(self) -> bool:
         try:
-            response = httpx.get(f"{self.base_url}/api/tags", timeout=5.0)
+            response = httpx.get(f"{self.base_url}/api/tags", headers=self._headers(), timeout=5.0)
             if not response.is_success:
                 return False
             models = response.json().get("models", [])
@@ -276,8 +300,9 @@ class ModelRouter:
     def generate(self,prompt:str, user_text: str | None = None)->str:
         try:
             return self.provider.generate(prompt, user_text=user_text)
-        except Exception:
-            # Keep basic chat usable during provider outages or invalid remote model configuration.
-            # Runtime emits model.failed only if this bounded local fallback also fails.
+        except Exception as exc:
+            # Keep chat responsive, but make provider failures visible in server logs for diagnosis.
+            logger.warning("Configured model provider %s failed (%s); using local fallback",
+                           getattr(self.provider, "name", "unknown"), type(exc).__name__)
             return LocalIntelligenceProvider().generate(prompt, user_text=user_text)
     def health(self)->bool: return self.provider.health()
