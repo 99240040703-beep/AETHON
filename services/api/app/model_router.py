@@ -222,10 +222,14 @@ class OllamaProvider:
         self.timeout = timeout
         self.access_client_id = os.getenv("OLLAMA_ACCESS_CLIENT_ID", "").strip()
         self.access_client_secret = os.getenv("OLLAMA_ACCESS_CLIENT_SECRET", "").strip()
+        self.api_key = os.getenv("OLLAMA_API_KEY", "").strip()
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
-        # Cloudflare Access service-token authentication; never put tokens in the URL.
+        # Prefer a bearer token when using the authenticated local gateway.
+        # Cloudflare Access service tokens remain supported for named tunnels.
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         if self.access_client_id and self.access_client_secret:
             headers["CF-Access-Client-Id"] = self.access_client_id
             headers["CF-Access-Client-Secret"] = self.access_client_secret
