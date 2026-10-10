@@ -70,6 +70,9 @@ class LocalIntelligenceProvider:
     name = "local-intelligence"
 
     _knowledge = {
+        "what is astra": "ASTRA stands for Advanced Smart Task & Reasoning Assistant. It is the AETHON-based AI workspace designed to help you chat, research, create content, work with code and files, and use connected tools when they are configured and authorized.",
+        "what is astra ai": "ASTRA stands for Advanced Smart Task & Reasoning Assistant. It is the AETHON-based AI workspace designed to help you chat, research, create content, work with code and files, and use connected tools when they are configured and authorized.",
+        "what is aethon": "AETHON is the existing AI assistant project being developed into ASTRA (Advanced Smart Task & Reasoning Assistant).",
         "btech": "B.Tech stands for Bachelor of Technology. It is an undergraduate engineering degree, usually completed in four years in India.",
         "what is btech": "B.Tech stands for Bachelor of Technology. It is an undergraduate engineering degree, usually completed in four years in India.",
         "btech means": "B.Tech stands for Bachelor of Technology. It is an undergraduate engineering degree, usually completed in four years in India.",
@@ -225,5 +228,11 @@ class ModelRouter:
             if not all((base_url,model,api_key)): raise RuntimeError("AETHON_MODEL_BASE_URL, AETHON_MODEL_NAME and AETHON_MODEL_API_KEY are required")
             return OpenAICompatibleProvider(base_url,model,api_key)
         raise RuntimeError(f"unsupported model provider: {provider}")
-    def generate(self,prompt:str, user_text: str | None = None)->str: return self.provider.generate(prompt, user_text=user_text)
+    def generate(self,prompt:str, user_text: str | None = None)->str:
+        try:
+            return self.provider.generate(prompt, user_text=user_text)
+        except Exception:
+            # Keep basic chat usable during provider outages or invalid remote model configuration.
+            # Runtime emits model.failed only if this bounded local fallback also fails.
+            return LocalIntelligenceProvider().generate(prompt, user_text=user_text)
     def health(self)->bool: return self.provider.health()
