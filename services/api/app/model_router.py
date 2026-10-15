@@ -316,7 +316,7 @@ class ModelRouter:
             timeout=float(os.getenv("AETHON_MODEL_TIMEOUT_SECONDS","120"))
             return OllamaProvider(base_url,model,timeout=timeout)
         if provider=="openai":
-            base_url=os.getenv("AETHON_MODEL_BASE_URL","https://api.openai.com/v1");model=os.getenv("AETHON_MODEL_NAME","gpt-5.6-luna");api_key=os.getenv("AETHON_MODEL_API_KEY","")
+            base_url=os.getenv("AETHON_MODEL_BASE_URL","https://api.openai.com/v1");model=os.getenv("AETHON_MODEL_NAME","gpt-6.1-sol");api_key=os.getenv("AETHON_MODEL_API_KEY","")
             if not api_key: raise RuntimeError("AETHON_MODEL_API_KEY is required when AETHON_MODEL_PROVIDER=openai")
             web_search=os.getenv("AETHON_WEB_SEARCH","false").strip().lower() in {"1","true","yes","on"}
             return OpenAIResponsesProvider(base_url,model,api_key,web_search=web_search)
